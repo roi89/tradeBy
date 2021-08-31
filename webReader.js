@@ -1,19 +1,35 @@
 const { By, Key, Builder } = require("selenium-webdriver");
 const config = require('./config');
+const fs = require('fs');
+const filePath = './currentCoins.json';
 require("chromedriver");
+const chrome = require('selenium-webdriver/chrome');
+let jsonCoins = require('./currentCoins.json');
+const { resolve } = require("path");
+const contacts = require('./telegramContacts.json');
+const { bot, startBot, sendMessageToAllContacts,updateNewCoins } = require('./telegramBot');
+const moment = require('moment');
 
 
-const setupDriver = async(url,driver) =>{
+const setupDriver = async (url, driver) => {
     await driver.get(url);
 };
 
-const extractElements = async(elementName,driver) =>{
+const timeOut = async (ms) => {
+    return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const saveCoinsToJson = (jsonFile, coins) => {
+    fs.writeFileSync(jsonFile, JSON.stringify(coins, null, 2));
+
+}
+const extractElements = async (elementName, driver) => {
     let currentDriver = driver;
     let elements = await currentDriver.findElements(By.className(elementName));
     return elements;
 };
 
-const extractTextFromElements = async(elements) =>{
+const extractTextFromElements = async (elements) => {
     let textFromElements = [];
     for (let i = 0; i < elements.length; i++) {
         let currentText = await elements[i].getText();
@@ -22,40 +38,76 @@ const extractTextFromElements = async(elements) =>{
     return textFromElements;
 };
 
-const extractFilteredText = async(elements,filters) =>{
+const extractFilteredText = async (elements, filter) => {
     let filteredElements = [];
-    for(let i = 0; i < elements.length; i++){
-        for(let o = 0; o < filters.length; o++ ){
-            if(elements[i].includes(filters[o])){
-                filteredElements.push(elements[i]);
-            }
-        }
+    for (let i = 0; i < elements.length; i++) {
+        if (elements[i].includes(filter)) {
+            filteredElements.push(elements[i]);
+        };
     }
     return filteredElements;
 };
 
-const extractFilteredRegex = async(elements,regex) =>{
+const extractFilteredRegex = async (elements) => {
     let filteredElements = [];
-    for(let i = 0; i < elements.length; i++){
-        for(let o = 0; o < regex.length; o++ ){
-            if(elements[i].match(/(?:\()[^\(\)]*?(?:\))/g) !== null){
-                filteredElements.push(elements[i].match(/(?:\()[^\(\)]*?(?:\))/g));
-            }
-        }
+    for (let i = 0; i < elements.length; i++) {
+        let extracts = elements[i].match(/\(.*?\)/g);
+        filteredElements.push(extracts);
     }
-    return filteredElements;
+    let flattenElements = filteredElements.flat();
+    let finalElements = [];
+    for (let o = 0; o < flattenElements.length; o++) {
+        finalElements.push(flattenElements[o].replace(/[()]/g, ''));
+    }
+    return finalElements;
+};
+
+const checkIfThereIsNewCoin = (json, currentCoinsLists, currentNumOfSite) => {
+    let savedCoinFile = JSON.parse(fs.readFileSync(filePath));
+    if (savedCoinFile[currentNumOfSite]['coins'][0] !== currentCoinsLists['coins'][0] && currentCoinsLists['coins'][0] !== null) {
+        sendMessageToAllContacts('found new coins in exchange: ' + currentCoinsLists['exchangeName'] + ' The coin is: ' + currentCoinsLists['coins'][0], bot, contacts);
+        console.log('found new coins in exchange: ' + currentCoinsLists['exchangeName']);
+        return;
+    }
+    return;
+};
+
+const extractCoins = async (driver,numOfSite,sitesList) =>{
+    let posts = await extractElements(sitesList[numOfSite]['ClassNames']['postsClassName'], driver);
+    let postTitles = await extractTextFromElements(posts);
+    let filteredTitles = await extractFilteredText(postTitles, sitesList[numOfSite]['titleFilter']);
+    let filteredCoins = await extractFilteredRegex(filteredTitles);
+    return filteredCoins;
 }
 
-const run = async () =>{
-    let driver = await new Builder().forBrowser("chrome").build();
-    await driver.get(config.coinbase.url.coinbaseBlog);
-    let posts = await extractElements(config.coinbase.ClassNames.postsClassName,driver);
-    let postTitles = await extractTextFromElements(posts);
-    postTitles.push('Axie Infinity (AXS), Request (REQ), TrueFi (TRU) and Wrapped Luna (WLUNA) are launching on Coinbase…')
-    postTitles.push('COTI (COTI) is launching on Coinbase Pro');
-    let filteredTitles = await extractFilteredText(postTitles,['launching on Coinbase']);
-    let filteredCoins = await extractFilteredRegex(filteredTitles,['/\((.*?)\)/']);
-    console.log(filteredCoins);
+const extractFromMultiplieSources = async (sites) => {
+    startBot(bot,filePath);
+    sendMessageToAllContacts('I am online!', bot, contacts);
+    let extractedCoins = [];
+    let turnOff = false;
+    let driver = await new Builder()
+        .forBrowser('chrome')
+        .setChromeOptions(new chrome.Options().headless())
+        .build();
+    while (turnOff === false) {
+        for (let i = 0; i < sites.length; i++) {
+            await driver.get(sites[i]['url']);
+            let filteredCoins = await extractCoins(driver,i,sites);
+            let currentTime = moment().format('LLLL');
+            let coinsList = {
+                lastUpdate: currentTime,
+                url: sites[i]['url'],
+                exchangeName: sites[i]['name'],
+                coins: filteredCoins
+            };
+            extractedCoins.push(coinsList);
+            checkIfThereIsNewCoin(jsonCoins, coinsList, i);
+        }
+        saveCoinsToJson(filePath, extractedCoins);
+        extractedCoins = [];
+        await timeOut(15000);
+    }
     await driver.quit();
-}
-run()
+};
+
+extractFromMultiplieSources([config.binance, config.coinbase]);

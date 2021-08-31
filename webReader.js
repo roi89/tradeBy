@@ -64,6 +64,7 @@ const extractFilteredRegex = async (elements) => {
 
 const checkIfThereIsNewCoin = (json, currentCoinsLists, currentNumOfSite) => {
     let savedCoinFile = JSON.parse(fs.readFileSync(filePath));
+    if(savedCoinFile[currentNumOfSite] === undefined){return;}
     if (savedCoinFile[currentNumOfSite]['coins'][0] !== currentCoinsLists['coins'][0] && currentCoinsLists['coins'][0] !== null) {
         sendMessageToAllContacts('found new coins in exchange: ' + currentCoinsLists['exchangeName'] + ' The coin is: ' + currentCoinsLists['coins'][0], bot, contacts);
         console.log('found new coins in exchange: ' + currentCoinsLists['exchangeName']);
@@ -82,7 +83,6 @@ const extractCoins = async (driver,numOfSite,sitesList) =>{
 
 const extractFromMultiplieSources = async (sites) => {
     startBot(bot,filePath);
-    sendMessageToAllContacts('I am online!', bot, contacts);
     let extractedCoins = [];
     let turnOff = false;
     let driver = await new Builder()
@@ -105,9 +105,9 @@ const extractFromMultiplieSources = async (sites) => {
         }
         saveCoinsToJson(filePath, extractedCoins);
         extractedCoins = [];
-        await timeOut(15000);
+        await timeOut(5000);
     }
     await driver.quit();
 };
 
-extractFromMultiplieSources([config.binance, config.coinbase]);
+extractFromMultiplieSources([config.binance, config.coinbase,config.kraken]);

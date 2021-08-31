@@ -2,8 +2,9 @@ const { Telegraf } = require('telegraf')
 const fs = require('fs');
 const contactsFile = require('./telegramContacts.json');
 const contactsPath = './telegramContacts.json';
+const botToken = require('./telegramToken.json')
 
-const bot = new Telegraf('1935850235:AAFVyLZu3m6cmphAqZkbn_rxkr-WfW_xwLo');
+const bot = new Telegraf(botToken.token);
 
 const addToContacts = (contacts, path, currentId) => {
     let contactsList = contacts

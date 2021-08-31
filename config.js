@@ -14,5 +14,13 @@ module.exports = {
             postsClassName: 'css-1ej4hfo'
         },
         titleFilter: 'Binance Will List'
+    },
+    kraken:{
+        name:'kraken',
+        url:'https://blog.kraken.com/',
+        ClassNames:{
+            postsClassName:'entry-title'
+        },
+        titleFilter: 'Trading starts'
     }
 }

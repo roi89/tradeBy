@@ -1,5 +1,5 @@
 const { By, Key, Builder } = require("selenium-webdriver");
-const config = require('./config');
+const config = require('./exchanges');
 const fs = require('fs');
 const filePath = './currentCoins.json';
 require("chromedriver");
@@ -23,9 +23,29 @@ const saveCoinsToJson = (jsonFile, coins) => {
     fs.writeFileSync(jsonFile, JSON.stringify(coins, null, 2));
 
 }
+const extractLoadedElements = async (elementName, driver,numOfPostToWaitFor) => {
+    let currentDriver = driver;
+    let loaded = false;
+    let elements = [];
+    if(numOfPostToWaitFor === undefined){
+        elements = await currentDriver.findElements(By.className(elementName));
+        return elements;
+    }
+    while(loaded === false){
+        await currentDriver.manage().setTimeouts( { implicit: 1000 } );
+        elements = await currentDriver.findElements(By.className(elementName));
+        if(elements.length >= numOfPostToWaitFor){
+            loaded = true;
+            return elements;
+        }
+    }
+};
+
 const extractElements = async (elementName, driver) => {
     let currentDriver = driver;
-    let elements = await currentDriver.findElements(By.className(elementName));
+    let elements = [];
+    await currentDriver.manage().setTimeouts( { implicit: 1000 } );
+    elements = await currentDriver.findElements(By.className(elementName));
     return elements;
 };
 
@@ -41,9 +61,11 @@ const extractTextFromElements = async (elements) => {
 const extractFilteredText = async (elements, filter) => {
     let filteredElements = [];
     for (let i = 0; i < elements.length; i++) {
-        if (elements[i].includes(filter)) {
-            filteredElements.push(elements[i]);
-        };
+        for(let o = 0; o < filter.length; o++){
+            if (elements[i].includes(filter[o])) {
+                filteredElements.push(elements[i]);
+            };
+        }
     }
     return filteredElements;
 };
@@ -74,28 +96,28 @@ const checkIfThereIsNewCoin = (json, currentCoinsLists, currentNumOfSite) => {
 };
 
 const extractCoins = async (driver,numOfSite,sitesList) =>{
-    let posts = await extractElements(sitesList[numOfSite]['ClassNames']['postsClassName'], driver);
+    let posts = await extractLoadedElements(sitesList[numOfSite]['ClassNames']['postsClassName'], driver,sitesList[numOfSite]['numOfPostsToWaitFor']);
     let postTitles = await extractTextFromElements(posts);
     let filteredTitles = await extractFilteredText(postTitles, sitesList[numOfSite]['titleFilter']);
     let filteredCoins = await extractFilteredRegex(filteredTitles);
     return filteredCoins;
-}
+};
+
 
 const extractFromMultiplieSources = async (sites) => {
     startBot(bot,filePath);
+    //sendMessageToAllContacts('Hey guys, please sub to me again by write: Sub me',bot,contacts);
     let extractedCoins = [];
     let turnOff = false;
     let driver = await new Builder()
         .forBrowser('chrome')
-        .setChromeOptions(new chrome.Options().headless())
         .build();
     while (turnOff === false) {
         for (let i = 0; i < sites.length; i++) {
             await driver.get(sites[i]['url']);
             let filteredCoins = await extractCoins(driver,i,sites);
-            let currentTime = moment().format('LLLL');
             let coinsList = {
-                lastUpdate: currentTime,
+                lastUpdate: moment().format('LLLL'),
                 url: sites[i]['url'],
                 exchangeName: sites[i]['name'],
                 coins: filteredCoins
@@ -105,7 +127,7 @@ const extractFromMultiplieSources = async (sites) => {
         }
         saveCoinsToJson(filePath, extractedCoins);
         extractedCoins = [];
-        await timeOut(5000);
+        await timeOut(10000);
     }
     await driver.quit();
 };
